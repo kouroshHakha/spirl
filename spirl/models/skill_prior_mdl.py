@@ -22,6 +22,8 @@ from spirl.modules.layers import LayerBuilderParams
 from spirl.modules.mdn import MDN, GMM
 from spirl.modules.flow_models import ConditionedFlowModel
 
+import time
+
 
 class SkillPriorMdl(BaseModel, ProbabilisticModel):
     """Skill embedding + prior model for SPIRL algorithm."""
@@ -100,17 +102,22 @@ class SkillPriorMdl(BaseModel, ProbabilisticModel):
         :arg inputs: dict with 'states', 'actions', 'images' keys from data loader
         :arg use_learned_prior: if True, decodes samples from learned prior instead of posterior, used for RL
         """
+        s_s = time.time()
         output = AttrDict()
         inputs.observations = inputs.actions    # for seamless evaluation
 
         # run inference
+        s_q = time.time()
         output.q = self._run_inference(inputs)
+        d_q = time.time() - s_q
 
         # compute (fixed) prior
         output.p = get_fixed_prior(output.q)
 
         # infer learned skill prior
+        s_qhat = time.time()
         output.q_hat = self.compute_learned_prior(self._learned_prior_input(inputs))
+        d_qhat = time.time() - s_qhat
         if use_learned_prior:
             output.p = output.q_hat     # use output of learned skill prior for sampling
 
@@ -120,9 +127,21 @@ class SkillPriorMdl(BaseModel, ProbabilisticModel):
 
         # decode
         assert self._regression_targets(inputs).shape[1] == self._hp.n_rollout_steps
+        s_decode = time.time()
         output.reconstruction = self.decode(output.z,
                                             cond_inputs=self._learned_prior_input(inputs),
                                             steps=self._hp.n_rollout_steps)
+        d_decode = time.time() - s_decode
+        d_total = time.time() - s_s
+
+        # if self.training:
+        #     print(f'Input_action: {tuple(inputs.actions.shape)}, '
+        #           f'Input_state: {tuple(self._learned_prior_input(inputs).shape)}, '
+        #           f'Total: {d_total:10.6f}, '
+        #           f'q: %{100*d_q/d_total:10.2f}, '
+        #           f'qhat: %{100*d_qhat/d_total:10.2f}, '
+        #           f'decode: %{100*d_decode/d_total:10.2f}')
+
         return output
 
     def loss(self, model_output, inputs):

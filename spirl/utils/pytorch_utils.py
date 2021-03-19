@@ -13,6 +13,7 @@ from torch.nn.functional import interpolate
 
 from spirl.utils.general_utils import batchwise_assign, map_dict, AttrDict, AverageMeter, map_recursive, remove_spatial
 from spirl.utils import ndim
+import spirl.modules.variational_inference as VI
 
 
 class LossSpikeHook:
@@ -264,8 +265,9 @@ class DataParallelWrapper(torch.nn.DataParallel):
             return getattr(self.module, name)
 
     def gather(self, outputs, output_device):
+        gathered_outputs = gather(outputs, output_device, dim=self.dim)
         """Overrides the standard gather function to handle custom classes that implement a 'reduce' function."""
-        return gather(outputs, output_device, dim=self.dim)
+        return gathered_outputs
 
 
 def gather(outputs, target_device, dim=0):
@@ -284,9 +286,13 @@ def gather(outputs, target_device, dim=0):
                 raise ValueError('All dicts must have the same number of keys')
             return type(out)(((k, gather_map([d[k] for d in outputs]))
                               for k in out))
+        if isinstance(out, VI.Gaussian):
+            gathered_out = out.reduce(*outputs, target_device=target_device)
+            return gathered_out
         try:
             return type(out)(map(gather_map, zip(*outputs)))
         except:
+            print(f'out = {out}, caught the exception')
             return type(out).reduce(*outputs)
 
     # Recursive function calls like this create reference cycles.

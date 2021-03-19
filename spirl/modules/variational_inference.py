@@ -3,9 +3,10 @@ import math
 import numpy as np
 
 from torch.distributions.multivariate_normal import MultivariateNormal
+from torch.nn.parallel._functions import Gather
 
-from spirl.utils.pytorch_utils import ten2ar
-from spirl.utils.general_utils import batch_apply
+import spirl.utils.pytorch_utils as pu
+# from spirl.utils.general_utils import batch_apply
 
 
 class Gaussian:
@@ -64,15 +65,20 @@ class Gaussian:
     def cat(*argv, dim):
         return Gaussian._combine(torch.cat, *argv, dim=dim)
 
-    @staticmethod
-    def _combine(fcn, *argv, dim):
+    @classmethod
+    def _combine(cls, fcn, *argv, dim):
         mu, log_sigma = [], []
         for g in argv:
             mu.append(g.mu)
             log_sigma.append(g.log_sigma)
         mu = fcn(mu, dim)
         log_sigma = fcn(log_sigma, dim)
-        return Gaussian(mu, log_sigma)
+        return cls(mu, log_sigma)
+
+    @classmethod
+    def reduce(cls, *gaussians, target_device):
+        fcn = lambda tensors, dim: Gather.apply(target_device, dim, *tensors)
+        return cls._combine(fcn, *gaussians, dim=0)
 
     def average(self, dists):
         """Fits single Gaussian to a list of Gaussians."""
@@ -105,7 +111,7 @@ class Gaussian:
 
     def to_numpy(self):
         """Convert internal variables to numpy arrays."""
-        return type(self)(ten2ar(self.mu), ten2ar(self.log_sigma))
+        return type(self)(pu.ten2ar(self.mu), pu.ten2ar(self.log_sigma))
 
 
 class UnitGaussian(Gaussian):
@@ -116,6 +122,7 @@ class UnitGaussian(Gaussian):
 
 
 class MultivariateGaussian(Gaussian):
+
     def log_prob(self, val):
         return super().log_prob(val).sum(-1)
 

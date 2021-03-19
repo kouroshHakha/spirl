@@ -34,6 +34,9 @@ class CustomLSTM(nn.Module):
         step_inputs = initial_inputs.copy()
         step_inputs.update(static_inputs)
         lstm_outputs = []
+        # HACK: get the batch size from input to reset the hidden state of the LSTM
+        bsize = next(iter((inputs if inputs else step_inputs).values())).shape[0]
+        self.cell.reset(bsize)
         for t in range(length):
             step_inputs.update(map_dict(lambda x: x[:, t], inputs))  # Slicing
             output = self.cell(**step_inputs)
@@ -160,10 +163,14 @@ class CustomLSTMCell(BaseCell):
                 start, end = n // 4, n // 2
                 bias.data[start:end].fill_(1.)
 
-    def reset(self):
+    def reset(self, bsize=None):
         # TODO make this trainable
-        self.hidden_var = torch.zeros(self._hp.batch_size, self.get_state_size(), device=self._hp.device)
-        
+        # HACK: modified the original code to take bsize so that the forward pass works with
+        # arbitrary batch size regardless of the original training batch size
+        if bsize is None:
+            bsize = self._hp.batch_size
+        self.hidden_var = torch.zeros(bsize, self.get_state_size(), device=self._hp.device)
+
     def get_state_size(self):
         return self.hidden_size * self.n_layers * 2
     
@@ -195,6 +202,9 @@ class CustomLSTMCell(BaseCell):
         embedded = self.embed(cell_input.view(-1, self.input_size))
         h_in = embedded
         for i in range(self.n_layers):
+            # HACK: get the initial hidden state on the same device as the rest of the tensors
+            self.hidden[i] = tuple([h.to(h_in) for h in self.hidden[i]])
+
             self.hidden[i] = self.lstm[i](h_in, self.hidden[i])
             h_in = self.hidden[i][0]
         output = self.output(h_in)

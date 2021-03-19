@@ -16,7 +16,7 @@ from spirl.rl.components.sampler import Sampler
 from spirl.rl.components.replay_buffer import RolloutStorage
 
 WANDB_PROJECT_NAME = 'comp_imitation'
-WANDB_ENTITY_NAME = 'clvr'
+WANDB_ENTITY_NAME = 'kouroshhakha'
 
 
 class RLTrainer:

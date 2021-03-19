@@ -21,6 +21,9 @@ from spirl.utils.pytorch_utils import LossSpikeHook, NanGradHook, NoneGradHook, 
                                                         DataParallelWrapper, RAdam
 from spirl.components.trainer_base import BaseTrainer
 from spirl.components.params import get_args
+import pdb
+from debug import register_pdb_hook
+register_pdb_hook()
 
 
 class ModelTrainer(BaseTrainer):
@@ -60,7 +63,7 @@ class ModelTrainer(BaseTrainer):
         self.optimizer = self.get_optimizer_class()(filter(lambda p: p.requires_grad, self.model.parameters()), lr=self._hp.lr)
         self.evaluator = self._hp.evaluator(self._hp, self.log_dir, self._hp.top_of_n_eval,
                                             self._hp.top_comp_metric, tb_logger=self.logger_test)
-        
+
         # load model params from checkpoint
         self.global_step, start_epoch = 0, 0
         if args.resume or conf.ckpt_path is not None:
@@ -147,7 +150,7 @@ class ModelTrainer(BaseTrainer):
                                        log_images=self.log_images_now, phase='train', **self._logging_kwargs)
             batch_time.update(time.time() - end)
             end = time.time()
-            
+
             if self.log_outputs_now:
                 print('GPU {}: {}'.format(os.environ["CUDA_VISIBLE_DEVICES"] if self.use_cuda else 'none',
                                           self._hp.exp_path))
@@ -188,7 +191,7 @@ class ModelTrainer(BaseTrainer):
 
                     losses_meter.update(losses)
                     del losses
-                
+
                 if not self.args.dont_save:
                     if self.evaluator is not None:
                         self.evaluator.dump_results(self.global_step)
@@ -284,10 +287,10 @@ class ModelTrainer(BaseTrainer):
         else:
             dataset_class = data_conf.dataset_spec.dataset_class
 
+        bsize = self._hp.batch_size if phase=='train' else dataset_size
         loader = dataset_class(self._hp.data_dir, data_conf, resolution=model.resolution,
                                phase=phase, shuffle=phase == "train", dataset_size=dataset_size). \
-            get_data_loader(self._hp.batch_size, n_repeat)
-
+            get_data_loader(bsize, n_repeat)
         return loader
 
     def resume(self, ckpt, path=None):
