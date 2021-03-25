@@ -62,8 +62,8 @@ class Sampler:
 
                         # reset if episode ends
                         if done or self._episode_step >= self._max_episode_len:
-                            if not done:    # force done to be True for timeout
-                                experience_batch[-1].done = True
+                            # if not done:    # force done to be True for timeout
+                            #     experience_batch[-1].done = True
                             self._episode_reset(global_step)
 
         return listdict2dictlist(experience_batch), step
